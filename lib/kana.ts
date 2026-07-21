@@ -71,7 +71,8 @@ export function kanaMastery(attempts: Attempt[]) {
     const breakdown = attempt.kanaBreakdown?.length ? attempt.kanaBreakdown : Array.from(attempt.kana).map((kana) => ({ kana, correct: attempt.correct }));
     for (const result of breakdown) {
       const row = map.get(result.kana) || { kana: result.kana, hits: 0, misses: 0 };
-      result.correct ? row.hits++ : row.misses++;
+      if (result.correct) row.hits++;
+      else row.misses++;
       map.set(result.kana, row);
     }
   }

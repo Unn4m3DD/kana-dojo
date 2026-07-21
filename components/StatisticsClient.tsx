@@ -34,13 +34,14 @@ export function StatisticsClient({ uuid }: { uuid: string }) {
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState<TimeRange>("all");
+  const [rangeReference, setRangeReference] = useState(0);
   useEffect(() => { getAttempts(uuid).then(setAttempts).finally(() => setLoading(false)); }, [uuid]);
 
   const visibleAttempts = useMemo(() => {
     if (range === "all") return attempts;
-    const cutoff = Date.now() - RANGE_DAYS[range] * 24 * 60 * 60 * 1000;
+    const cutoff = rangeReference - RANGE_DAYS[range] * 24 * 60 * 60 * 1000;
     return attempts.filter((item) => new Date(item.createdAt).getTime() >= cutoff);
-  }, [attempts, range]);
+  }, [attempts, range, rangeReference]);
 
   const stats = useMemo(() => {
     const correct = visibleAttempts.filter((item) => item.correct).length;
@@ -65,7 +66,7 @@ export function StatisticsClient({ uuid }: { uuid: string }) {
   return (
     <AppShell uuid={uuid} kicker="YOUR PROGRESS" title="Consistency, made visible." aside={
       <div className="period-picker">
-        <select aria-label="Statistics time range" value={range} onChange={(event) => setRange(event.target.value as TimeRange)}>
+        <select aria-label="Statistics time range" value={range} onChange={(event) => { setRange(event.target.value as TimeRange); setRangeReference(Date.now()); }}>
           <option value="7d">Last 7 days</option>
           <option value="30d">Last 30 days</option>
           <option value="all">All time</option>

@@ -16,17 +16,57 @@ export function PracticeClient({ uuid }: { uuid: string }) {
   const [storageMode, setStorageMode] = useState<"turso" | "device" | null>(null);
   const [adaptive, setAdaptive] = useState(true);
   const [history, setHistory] = useState<Attempt[]>([]);
-  const startedAt = useRef(performance.now());
+  const [isFocused, setIsFocused] = useState(true);
+  const activeElapsed = useRef(0);
+  const activeStartedAt = useRef<number | null>(null);
+  const timingActive = useRef(true);
+  const focusState = useRef(true);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { getAttempts(uuid).then((items) => { setHistory(items); setWord(items.length ? adaptiveWord(items) : randomWord()); startedAt.current = performance.now(); }); }, [uuid]);
+  const resetActiveTimer = useCallback(() => {
+    activeElapsed.current = 0;
+    timingActive.current = true;
+    activeStartedAt.current = focusState.current ? performance.now() : null;
+  }, []);
+
+  useEffect(() => {
+    function syncFocus() {
+      const focused = document.visibilityState === "visible" && document.hasFocus();
+      focusState.current = focused;
+      setIsFocused(focused);
+      if (!timingActive.current) return;
+      if (focused && activeStartedAt.current === null) activeStartedAt.current = performance.now();
+      if (!focused && activeStartedAt.current !== null) {
+        activeElapsed.current += performance.now() - activeStartedAt.current;
+        activeStartedAt.current = null;
+      }
+    }
+    window.addEventListener("focus", syncFocus);
+    window.addEventListener("blur", syncFocus);
+    document.addEventListener("visibilitychange", syncFocus);
+    syncFocus();
+    return () => {
+      window.removeEventListener("focus", syncFocus);
+      window.removeEventListener("blur", syncFocus);
+      document.removeEventListener("visibilitychange", syncFocus);
+    };
+  }, []);
+
+  useEffect(() => { getAttempts(uuid).then((items) => { setHistory(items); setWord(items.length ? adaptiveWord(items) : randomWord()); resetActiveTimer(); }); }, [resetActiveTimer, uuid]);
+
+  useEffect(() => {
+    if (isFocused && !result) requestAnimationFrame(() => inputRef.current?.focus());
+  }, [isFocused, result]);
 
   const validateWord = useCallback(async () => {
-    if (!answer.trim() || result) return;
+    if (!answer.trim() || result || !focusState.current || !timingActive.current) return;
     const typed = answer.trim().toLowerCase();
     const accepted = [word.romaji, ...(word.alternatives || [])];
     const correct = accepted.includes(typed);
-    const durationMs = Math.max(800, performance.now() - startedAt.current);
+    if (activeStartedAt.current !== null) activeElapsed.current += performance.now() - activeStartedAt.current;
+    activeStartedAt.current = null;
+    timingActive.current = false;
+    const durationMs = Math.max(1, activeElapsed.current);
     const breakdown = kanaBreakdown(word.kana, word.romaji, typed);
     const matched = breakdown.filter((item) => item.correct).length;
     const attempt: Attempt = {
@@ -48,9 +88,9 @@ export function PracticeClient({ uuid }: { uuid: string }) {
     setWord(adaptive ? adaptiveWord(history, word.kana) : randomWord(word.kana));
     setAnswer("");
     setResult(null);
-    startedAt.current = performance.now();
+    resetActiveTimer();
     requestAnimationFrame(() => inputRef.current?.focus());
-  }, [adaptive, history, word.kana]);
+  }, [adaptive, history, resetActiveTimer, word.kana]);
 
   function check(event: FormEvent) {
     event.preventDefault();
@@ -59,31 +99,32 @@ export function PracticeClient({ uuid }: { uuid: string }) {
 
   useEffect(() => {
     function handlePracticeKey(event: KeyboardEvent) {
-      if (event.repeat || (event.key !== "Enter" && event.key !== " ")) return;
+      if (!isFocused || event.repeat || (event.key !== "Enter" && event.key !== " ")) return;
       event.preventDefault();
       if (result) next();
       else if (answer.trim()) void validateWord();
     }
     window.addEventListener("keydown", handlePracticeKey);
     return () => window.removeEventListener("keydown", handlePracticeKey);
-  }, [answer, next, result, validateWord]);
+  }, [answer, isFocused, next, result, validateWord]);
 
   const maxLength = Math.max(answer.length, word.romaji.length);
 
   return (
     <AppShell uuid={uuid} kicker="DAILY PRACTICE" title="" aside={<div className="practice-controls"><button className={adaptive ? "adaptive-toggle on" : "adaptive-toggle"} onClick={() => setAdaptive((value) => !value)}><i /><span><b>Adaptive mix</b><small>{adaptive ? "Prioritizing tricky kana" : "Fully random words"}</small></span></button><div className="session-pills"><span><b>{streak}</b> streak</span><span><b>{sessionCount}</b> words</span></div></div>}>
-      <section className={`practice-card ${result ? (result.correct ? "is-correct" : "is-wrong") : ""}`}>
-        <div className="card-index"><span>{String(sessionCount + 1).padStart(2, "0")}</span><i /></div>
+      <section className={`practice-card ${isFocused ? "is-focused" : "is-unfocused"} ${result ? (result.correct ? "is-correct" : "is-wrong") : ""}`}>
+        <div className="card-index"><span>{String(sessionCount + 1).padStart(2, "0")}</span><i /><span className="focus-badge"><b />{isFocused ? "Focused" : "Paused"}</span></div>
         <div className="practice-body">
           <div className="word-stage">
             <p className="stage-label">TYPE THIS IN ROMAJI</p>
             <div className="kana-word" lang="ja">{word.kana}</div>
+            {!isFocused && <div className="focus-overlay" role="status"><strong>Practice paused</strong><span>Return to this window to continue</span></div>}
           </div>
           <form className="answer-area" onSubmit={check}>
             <label htmlFor="answer">Your answer</label>
             <div className="answer-row">
-              <input ref={inputRef} id="answer" autoFocus autoComplete="off" spellCheck={false} value={answer} disabled={Boolean(result)} onChange={(event) => setAnswer(event.target.value.replace(/[^a-zA-Z]/g, ""))} placeholder="type the romaji…" />
-              {!result && <button className="check-button" type="submit" disabled={!answer}>Check <span>↵</span></button>}
+              <input ref={inputRef} id="answer" autoFocus autoComplete="off" spellCheck={false} value={answer} disabled={Boolean(result) || !isFocused} onChange={(event) => setAnswer(event.target.value.replace(/[^a-zA-Z]/g, ""))} placeholder="type the romaji…" />
+              {!result && <button className="check-button" type="submit" disabled={!answer || !isFocused}>Check <span>↵</span></button>}
               {result && <button className="check-button next" type="button" onClick={next}>Next <span>→</span></button>}
             </div>
             <div className="response-panel">
