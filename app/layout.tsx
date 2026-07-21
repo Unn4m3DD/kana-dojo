@@ -16,12 +16,12 @@ export const metadata: Metadata = {
   title: "Kana Dojo — Hiragana Practice",
   description: "Build speed and accuracy by transcribing one hiragana word at a time.",
   openGraph: {
-    title: "Kana Dojo — One word. Full focus.",
+    title: "Kana Dojo — Hiragana Practice",
     description: "Build hiragana speed and accuracy with adaptive romaji practice.",
     type: "website",
     images: [{ url: "/og.png", width: 1536, height: 1024, alt: "Kana Dojo hiragana practice" }],
   },
-  twitter: { card: "summary_large_image", title: "Kana Dojo", description: "One word. Full focus.", images: ["/og.png"] },
+  twitter: { card: "summary_large_image", title: "Kana Dojo", description: "Build hiragana speed and accuracy with adaptive romaji practice.", images: ["/og.png"] },
 };
 
 export default function RootLayout({

@@ -22,7 +22,7 @@ export function AppShell({ uuid, children, kicker, title, aside }: { uuid: strin
       </header>
       <main className="app-main">
         <div className="page-heading">
-          <div><p className="eyebrow">{kicker}</p><h1>{title}</h1></div>
+          <div><p className="eyebrow">{kicker}</p>{title ? <h1>{title}</h1> : null}</div>
           {aside}
         </div>
         {children}

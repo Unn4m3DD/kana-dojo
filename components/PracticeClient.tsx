@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AppShell } from "./AppShell";
 import { randomWord, type KanaWord } from "@/lib/words";
 import { getAttempts, saveAttempt } from "@/lib/storage";
@@ -21,8 +21,7 @@ export function PracticeClient({ uuid }: { uuid: string }) {
 
   useEffect(() => { getAttempts(uuid).then((items) => { setHistory(items); setWord(items.length ? adaptiveWord(items) : randomWord()); startedAt.current = performance.now(); }); }, [uuid]);
 
-  async function check(event: FormEvent) {
-    event.preventDefault();
+  const validateWord = useCallback(async () => {
     if (!answer.trim() || result) return;
     const typed = answer.trim().toLowerCase();
     const accepted = [word.romaji, ...(word.alternatives || [])];
@@ -43,48 +42,72 @@ export function PracticeClient({ uuid }: { uuid: string }) {
     setStreak((value) => correct ? value + 1 : 0);
     setSessionCount((value) => value + 1);
     setStorageMode(await saveAttempt(uuid, attempt));
-  }
+  }, [answer, result, uuid, word]);
 
-  function next() {
+  const next = useCallback(() => {
     setWord(adaptive ? adaptiveWord(history, word.kana) : randomWord(word.kana));
     setAnswer("");
     setResult(null);
     startedAt.current = performance.now();
     requestAnimationFrame(() => inputRef.current?.focus());
+  }, [adaptive, history, word.kana]);
+
+  function check(event: FormEvent) {
+    event.preventDefault();
+    void validateWord();
   }
+
+  useEffect(() => {
+    function handlePracticeKey(event: KeyboardEvent) {
+      if (event.repeat || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      if (result) next();
+      else if (answer.trim()) void validateWord();
+    }
+    window.addEventListener("keydown", handlePracticeKey);
+    return () => window.removeEventListener("keydown", handlePracticeKey);
+  }, [answer, next, result, validateWord]);
 
   const maxLength = Math.max(answer.length, word.romaji.length);
 
   return (
-    <AppShell uuid={uuid} kicker="DAILY PRACTICE" title="One word. Full focus." aside={<div className="practice-controls"><button className={adaptive ? "adaptive-toggle on" : "adaptive-toggle"} onClick={() => setAdaptive((value) => !value)}><i /><span><b>Adaptive mix</b><small>{adaptive ? "Prioritizing tricky kana" : "Fully random words"}</small></span></button><div className="session-pills"><span><b>{streak}</b> streak</span><span><b>{sessionCount}</b> words</span></div></div>}>
+    <AppShell uuid={uuid} kicker="DAILY PRACTICE" title="" aside={<div className="practice-controls"><button className={adaptive ? "adaptive-toggle on" : "adaptive-toggle"} onClick={() => setAdaptive((value) => !value)}><i /><span><b>Adaptive mix</b><small>{adaptive ? "Prioritizing tricky kana" : "Fully random words"}</small></span></button><div className="session-pills"><span><b>{streak}</b> streak</span><span><b>{sessionCount}</b> words</span></div></div>}>
       <section className={`practice-card ${result ? (result.correct ? "is-correct" : "is-wrong") : ""}`}>
         <div className="card-index"><span>{String(sessionCount + 1).padStart(2, "0")}</span><i /></div>
-        <div className="word-stage">
-          <p className="stage-label">TYPE THIS IN ROMAJI</p>
-          <div className="kana-word" lang="ja">{word.kana}</div>
-          <div className="translation"><span className="translation-line" /> {word.translation} <span className="translation-line" /></div>
-        </div>
-        <form className="answer-area" onSubmit={check}>
-          <label htmlFor="answer">Your answer</label>
-          <div className="answer-row">
-            <input ref={inputRef} id="answer" autoFocus autoComplete="off" spellCheck={false} value={answer} disabled={Boolean(result)} onChange={(event) => setAnswer(event.target.value.replace(/[^a-zA-Z]/g, ""))} placeholder="type the romaji…" />
-            {!result && <button className="check-button" type="submit" disabled={!answer}>Check <span>↵</span></button>}
-            {result && <button className="check-button next" type="button" onClick={next}>Next <span>→</span></button>}
+        <div className="practice-body">
+          <div className="word-stage">
+            <p className="stage-label">TYPE THIS IN ROMAJI</p>
+            <div className="kana-word" lang="ja">{word.kana}</div>
           </div>
-          {!result && <div className="answer-hint"><span>Press enter to check</span><button type="button" onClick={next}>Skip this word</button></div>}
-          {result && (
-            <div className="feedback" role="status">
-              <div className="feedback-title"><span>{result.correct ? "✓" : "!"}</span><strong>{result.correct ? "Nicely done." : "Almost — look closely."}</strong><em>{result.kanaPerMinute} kana/min</em></div>
-              {!result.correct && <div className="letter-check" aria-label={`Your answer ${answer}; expected ${word.romaji}`}>
-                {Array.from({ length: maxLength }).map((_, index) => {
-                  const typed = answer[index] || "·"; const expected = word.romaji[index] || "·"; const ok = typed === expected;
-                  return <span className={ok ? "letter-good" : "letter-bad"} key={index}><b>{typed}</b><small>{ok ? "✓" : expected}</small></span>;
-                })}
-              </div>}
-              {!result.correct && <p>You typed <b>{answer}</b>. The standard spelling is <strong>{word.romaji}</strong>.</p>}
+          <form className="answer-area" onSubmit={check}>
+            <label htmlFor="answer">Your answer</label>
+            <div className="answer-row">
+              <input ref={inputRef} id="answer" autoFocus autoComplete="off" spellCheck={false} value={answer} disabled={Boolean(result)} onChange={(event) => setAnswer(event.target.value.replace(/[^a-zA-Z]/g, ""))} placeholder="type the romaji…" />
+              {!result && <button className="check-button" type="submit" disabled={!answer}>Check <span>↵</span></button>}
+              {result && <button className="check-button next" type="button" onClick={next}>Next <span>→</span></button>}
             </div>
-          )}
-        </form>
+            <div className="response-panel">
+              {!result && <div className="coach-panel">
+                <p className="eyebrow">KEYBOARD RHYTHM</p>
+                <p>Type your answer, then use either key to check it. Press the same key again for the next word.</p>
+                <div className="key-guide"><kbd>space</kbd><span>or</span><kbd>enter ↵</kbd></div>
+                <button type="button" onClick={next}>Skip this word</button>
+              </div>}
+              {result && <div className="feedback" role="status">
+                <div className="feedback-title"><span>{result.correct ? "✓" : "!"}</span><strong>{result.correct ? "Nicely done." : "Almost — look closely."}</strong><em>{result.kanaPerMinute} kana/min</em></div>
+                <div className="feedback-translation">{word.translation}</div>
+                {!result.correct && <div className="letter-check" aria-label={`Your answer ${answer}; expected ${word.romaji}`}>
+                  {Array.from({ length: maxLength }).map((_, index) => {
+                    const typed = answer[index] || "·"; const expected = word.romaji[index] || "·"; const ok = typed === expected;
+                    return <span className={ok ? "letter-good" : "letter-bad"} key={index}><b>{typed}</b><small>{ok ? "✓" : expected}</small></span>;
+                  })}
+                </div>}
+                {!result.correct && <p>You typed <b>{answer}</b>. The standard spelling is <strong>{word.romaji}</strong>.</p>}
+                {result.correct && <p className="correct-copy">Ready for another? Press <kbd>space</kbd> or <kbd>enter ↵</kbd>.</p>}
+              </div>}
+            </div>
+          </form>
+        </div>
         <div className="card-footer"><span className="difficulty-dot" /> Mixed hiragana <span className="footer-divider">•</span> {storageMode === "device" ? "Saving on this device until Turso is connected" : "Progress saves automatically"}</div>
       </section>
       <div className="practice-note"><span>⌁</span><p><b>Small steps compound.</b> Accuracy comes first; speed follows naturally.</p></div>

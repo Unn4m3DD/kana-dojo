@@ -29,6 +29,17 @@ test("renders a valid UUIDv4 practice route", async () => {
   const response = await request("/u/5aa92f3c-8df6-43c1-a47f-78008a38c949/practice");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /One word\. Full focus\./);
+  assert.doesNotMatch(html, /One word\. Full focus\./);
+  assert.doesNotMatch(html, /Stay in the flow\.|Meaning reveals after your answer/);
   assert.match(html, /Adaptive mix/);
+});
+
+test("renders an interactive statistics time-range picker", async () => {
+  const response = await request("/u/5aa92f3c-8df6-43c1-a47f-78008a38c949/statistics");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /aria-label="Statistics time range"/);
+  assert.match(html, /Last 7 days/);
+  assert.match(html, /Last 30 days/);
+  assert.match(html, /All time/);
 });
