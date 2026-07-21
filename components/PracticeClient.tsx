@@ -120,16 +120,17 @@ export function PracticeClient({ uuid }: { uuid: string }) {
   }, [answer, isFocused, next, result, validateWord]);
 
   const maxLength = Math.max(answer.length, word.romaji.length);
+  const promptIsVisible = isFocused || Boolean(result);
 
   return (
     <AppShell uuid={uuid} kicker="DAILY PRACTICE" title="" aside={<div className="practice-controls"><button className={adaptive ? "adaptive-toggle on" : "adaptive-toggle"} onClick={() => setAdaptive((value) => !value)}><i /><span><b>Adaptive mix</b><small>{adaptive ? "Prioritizing tricky kana" : "Fully random words"}</small></span></button><div className="session-pills"><span><b>{streak}</b> streak</span><span><b>{sessionCount}</b> words</span></div></div>}>
-      <section className={`practice-card ${isFocused ? "is-focused" : "is-unfocused"} ${result ? (result.correct ? "is-correct" : "is-wrong") : ""}`}>
-        <div className="card-index"><span>{String(sessionCount + 1).padStart(2, "0")}</span><i /><span className="focus-badge"><b />{isFocused ? "Focused" : "Paused"}</span></div>
+      <section className={`practice-card ${promptIsVisible ? "is-focused" : "is-unfocused"} ${result ? (result.correct ? "is-correct" : "is-wrong") : ""}`}>
+        <div className="card-index"><span>{String(sessionCount + 1).padStart(2, "0")}</span><i /><span className="focus-badge"><b />{result ? "Submitted" : isFocused ? "Focused" : "Paused"}</span></div>
         <div className="practice-body">
           <div className="word-stage">
             <p className="stage-label">TYPE THIS IN ROMAJI</p>
             <div className="kana-word" lang="ja">{word.kana}</div>
-            {!isFocused && <div className="focus-overlay" role="status"><strong>Practice paused</strong><span>Focus the answer field to continue</span></div>}
+            {!isFocused && !result && <div className="focus-overlay" role="status"><strong>Practice paused</strong><span>Focus the answer field to continue</span></div>}
           </div>
           <form className="answer-area" onSubmit={check}>
             <label htmlFor="answer">Your answer</label>
