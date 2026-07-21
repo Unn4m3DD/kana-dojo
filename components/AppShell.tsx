@@ -2,12 +2,36 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 export function AppShell({ uuid, children, kicker, title, aside }: { uuid: string; children: ReactNode; kicker: string; title: string; aside?: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const shortKey = `${uuid.slice(0, 4)}••${uuid.slice(-4)}`;
+  const [copied, setCopied] = useState(false);
+  const copyResetTimer = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
+  }, []);
+
+  async function copyStudyId() {
+    try {
+      await navigator.clipboard.writeText(uuid);
+    } catch {
+      const field = document.createElement("textarea");
+      field.value = uuid;
+      field.style.position = "fixed";
+      field.style.opacity = "0";
+      document.body.appendChild(field);
+      field.select();
+      document.execCommand("copy");
+      field.remove();
+    }
+    setCopied(true);
+    if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
+    copyResetTimer.current = window.setTimeout(() => setCopied(false), 1600);
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -16,9 +40,14 @@ export function AppShell({ uuid, children, kicker, title, aside }: { uuid: strin
           <Link className={pathname.endsWith("/practice") ? "active" : ""} href={`/u/${uuid}/practice`}>Practice</Link>
           <Link className={pathname.endsWith("/statistics") ? "active" : ""} href={`/u/${uuid}/statistics`}>Statistics</Link>
         </nav>
-        <button className="profile-pill" onClick={() => router.push("/")} aria-label="Sign out and return to login">
-          <span className="profile-dot" /> {shortKey} <span className="exit-icon">↗</span>
-        </button>
+        <div className="profile-actions">
+          <div className="profile-pill" aria-label={`Study ID ${uuid}`}>
+            <span className="profile-dot" />
+            <span className="profile-key"><small>STUDY ID</small><code>{uuid}</code></span>
+            <button className="copy-id" type="button" onClick={() => void copyStudyId()} aria-label="Copy study ID">{copied ? "Copied" : "Copy"}</button>
+          </div>
+          <button className="signout-button" type="button" onClick={() => router.push("/")} aria-label="Sign out and return to login">↗</button>
+        </div>
       </header>
       <main className="app-main">
         <div className="page-heading">

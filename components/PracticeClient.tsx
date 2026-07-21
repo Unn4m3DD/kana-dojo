@@ -16,12 +16,23 @@ export function PracticeClient({ uuid }: { uuid: string }) {
   const [storageMode, setStorageMode] = useState<"turso" | "device" | null>(null);
   const [adaptive, setAdaptive] = useState(true);
   const [history, setHistory] = useState<Attempt[]>([]);
-  const [isFocused, setIsFocused] = useState(true);
+  const [isFocused, setIsFocused] = useState(false);
   const activeElapsed = useRef(0);
   const activeStartedAt = useRef<number | null>(null);
   const timingActive = useRef(true);
-  const focusState = useRef(true);
+  const focusState = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const updatePracticeFocus = useCallback((focused: boolean) => {
+    focusState.current = focused;
+    setIsFocused(focused);
+    if (!timingActive.current) return;
+    if (focused && activeStartedAt.current === null) activeStartedAt.current = performance.now();
+    if (!focused && activeStartedAt.current !== null) {
+      activeElapsed.current += performance.now() - activeStartedAt.current;
+      activeStartedAt.current = null;
+    }
+  }, []);
 
   const resetActiveTimer = useCallback(() => {
     activeElapsed.current = 0;
@@ -31,15 +42,7 @@ export function PracticeClient({ uuid }: { uuid: string }) {
 
   useEffect(() => {
     function syncFocus() {
-      const focused = document.visibilityState === "visible" && document.hasFocus();
-      focusState.current = focused;
-      setIsFocused(focused);
-      if (!timingActive.current) return;
-      if (focused && activeStartedAt.current === null) activeStartedAt.current = performance.now();
-      if (!focused && activeStartedAt.current !== null) {
-        activeElapsed.current += performance.now() - activeStartedAt.current;
-        activeStartedAt.current = null;
-      }
+      updatePracticeFocus(document.visibilityState === "visible" && document.hasFocus() && document.activeElement === inputRef.current);
     }
     window.addEventListener("focus", syncFocus);
     window.addEventListener("blur", syncFocus);
@@ -50,13 +53,13 @@ export function PracticeClient({ uuid }: { uuid: string }) {
       window.removeEventListener("blur", syncFocus);
       document.removeEventListener("visibilitychange", syncFocus);
     };
-  }, []);
+  }, [updatePracticeFocus]);
 
   useEffect(() => { getAttempts(uuid).then((items) => { setHistory(items); setWord(items.length ? adaptiveWord(items) : randomWord()); resetActiveTimer(); }); }, [resetActiveTimer, uuid]);
 
   useEffect(() => {
-    if (isFocused && !result) requestAnimationFrame(() => inputRef.current?.focus());
-  }, [isFocused, result]);
+    if (!result) requestAnimationFrame(() => inputRef.current?.focus());
+  }, [result]);
 
   const validateWord = useCallback(async () => {
     if (!answer.trim() || result || !focusState.current || !timingActive.current) return;
@@ -66,6 +69,7 @@ export function PracticeClient({ uuid }: { uuid: string }) {
     if (activeStartedAt.current !== null) activeElapsed.current += performance.now() - activeStartedAt.current;
     activeStartedAt.current = null;
     timingActive.current = false;
+    updatePracticeFocus(false);
     const durationMs = Math.max(1, activeElapsed.current);
     const breakdown = kanaBreakdown(word.kana, word.romaji, typed);
     const matched = breakdown.filter((item) => item.correct).length;
@@ -82,7 +86,7 @@ export function PracticeClient({ uuid }: { uuid: string }) {
     setStreak((value) => correct ? value + 1 : 0);
     setSessionCount((value) => value + 1);
     setStorageMode(await saveAttempt(uuid, attempt));
-  }, [answer, result, uuid, word]);
+  }, [answer, result, updatePracticeFocus, uuid, word]);
 
   const next = useCallback(() => {
     setWord(adaptive ? adaptiveWord(history, word.kana) : randomWord(word.kana));
@@ -99,7 +103,9 @@ export function PracticeClient({ uuid }: { uuid: string }) {
 
   useEffect(() => {
     function handlePracticeKey(event: KeyboardEvent) {
-      if (!isFocused || event.repeat || (event.key !== "Enter" && event.key !== " ")) return;
+      if (event.repeat || (event.key !== "Enter" && event.key !== " ")) return;
+      if (!result && !isFocused) return;
+      if (event.target instanceof HTMLElement && event.target !== inputRef.current && event.target.closest("button, a, select")) return;
       event.preventDefault();
       if (result) next();
       else if (answer.trim()) void validateWord();
@@ -118,13 +124,13 @@ export function PracticeClient({ uuid }: { uuid: string }) {
           <div className="word-stage">
             <p className="stage-label">TYPE THIS IN ROMAJI</p>
             <div className="kana-word" lang="ja">{word.kana}</div>
-            {!isFocused && <div className="focus-overlay" role="status"><strong>Practice paused</strong><span>Return to this window to continue</span></div>}
+            {!isFocused && <div className="focus-overlay" role="status"><strong>Practice paused</strong><span>Focus the answer field to continue</span></div>}
           </div>
           <form className="answer-area" onSubmit={check}>
             <label htmlFor="answer">Your answer</label>
             <div className="answer-row">
-              <input ref={inputRef} id="answer" autoFocus autoComplete="off" spellCheck={false} value={answer} disabled={Boolean(result) || !isFocused} onChange={(event) => setAnswer(event.target.value.replace(/[^a-zA-Z]/g, ""))} placeholder="type the romaji…" />
-              {!result && <button className="check-button" type="submit" disabled={!answer || !isFocused}>Check <span>↵</span></button>}
+              <input ref={inputRef} id="answer" autoFocus autoComplete="off" spellCheck={false} value={answer} disabled={Boolean(result)} onFocus={() => updatePracticeFocus(true)} onBlur={() => updatePracticeFocus(false)} onChange={(event) => setAnswer(event.target.value.replace(/[^a-zA-Z]/g, ""))} placeholder="type the romaji…" />
+              {!result && <button className="check-button" type="submit" disabled={!answer || !isFocused} onPointerDown={(event) => event.preventDefault()}>Check <span>↵</span></button>}
               {result && <button className="check-button next" type="button" onClick={next}>Next <span>→</span></button>}
             </div>
             <div className="response-panel">
