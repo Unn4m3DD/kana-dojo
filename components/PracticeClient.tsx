@@ -103,6 +103,11 @@ export function PracticeClient({ uuid }: { uuid: string }) {
 
   useEffect(() => {
     function handlePracticeKey(event: KeyboardEvent) {
+      if (event.key === "Escape" && document.activeElement === inputRef.current) {
+        event.preventDefault();
+        inputRef.current?.blur();
+        return;
+      }
       if (event.repeat || (event.key !== "Enter" && event.key !== " ")) return;
       if (!result && !isFocused) return;
       if (event.target instanceof HTMLElement && event.target !== inputRef.current && event.target.closest("button, a, select")) return;
