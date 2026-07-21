@@ -5,7 +5,7 @@ import { AppShell } from "./AppShell";
 import { randomWord, type KanaWord } from "@/lib/words";
 import { getAttempts, saveAttempt } from "@/lib/storage";
 import type { Attempt } from "@/lib/types";
-import { adaptiveWord, kanaBreakdown } from "@/lib/kana";
+import { adaptiveWord, kanaBreakdown, recentSuccessfulKana } from "@/lib/kana";
 
 export function PracticeClient({ uuid }: { uuid: string }) {
   const [word, setWord] = useState<KanaWord>({ kana: "きょう", romaji: "kyou", translation: "today" });
@@ -89,7 +89,7 @@ export function PracticeClient({ uuid }: { uuid: string }) {
   }, [answer, result, updatePracticeFocus, uuid, word]);
 
   const next = useCallback(() => {
-    setWord(adaptive ? adaptiveWord(history, word.kana) : randomWord(word.kana));
+    setWord(adaptive ? adaptiveWord(history, word.kana) : randomWord(word.kana, recentSuccessfulKana(history)));
     setAnswer("");
     setResult(null);
     resetActiveTimer();

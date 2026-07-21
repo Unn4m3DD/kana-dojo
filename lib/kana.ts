@@ -12,7 +12,22 @@ const ROMAJI: Record<string, string> = {
   きゃ:"kya",きゅ:"kyu",きょ:"kyo",しゃ:"sha",しゅ:"shu",しょ:"sho",ちゃ:"cha",ちゅ:"chu",ちょ:"cho",
   にゃ:"nya",にゅ:"nyu",にょ:"nyo",ひゃ:"hya",ひゅ:"hyu",ひょ:"hyo",みゃ:"mya",みゅ:"myu",みょ:"myo",
   りゃ:"rya",りゅ:"ryu",りょ:"ryo",ぎゃ:"gya",ぎゅ:"gyu",ぎょ:"gyo",じゃ:"ja",じゅ:"ju",じょ:"jo",
+  びゃ:"bya",びゅ:"byu",びょ:"byo",ぴゃ:"pya",ぴゅ:"pyu",ぴょ:"pyo",
 };
+
+export const RECENT_SUCCESS_WINDOW = 24;
+
+export function recentSuccessfulKana(attempts: Attempt[]) {
+  const kana = new Set<string>();
+  let successes = 0;
+  for (const attempt of attempts) {
+    if (!attempt.correct) continue;
+    kana.add(attempt.kana);
+    successes++;
+    if (successes === RECENT_SUCCESS_WINDOW) break;
+  }
+  return kana;
+}
 
 export type KanaResult = { kana: string; correct: boolean };
 
@@ -80,7 +95,9 @@ export function kanaMastery(attempts: Attempt[]) {
 }
 
 export function adaptiveWord(attempts: Attempt[], except?: string): KanaWord {
-  const candidates = WORDS.filter((word) => word.kana !== except);
+  const recentSuccesses = recentSuccessfulKana(attempts);
+  const freshCandidates = WORDS.filter((word) => word.kana !== except && !recentSuccesses.has(word.kana));
+  const candidates = freshCandidates.length ? freshCandidates : WORDS.filter((word) => word.kana !== except);
   if (attempts.length < 3 || Math.random() < .25) return candidates[Math.floor(Math.random() * candidates.length)];
   const mastery = kanaMastery(attempts);
   const missRate = new Map(mastery.map((item) => [item.kana, 1 - item.accuracy / 100]));
