@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function AppShell({ uuid, children, kicker, title, aside }: { uuid: string; children: ReactNode; kicker: string; title: string; aside?: ReactNode }) {
   const pathname = usePathname();
@@ -39,6 +40,7 @@ export function AppShell({ uuid, children, kicker, title, aside }: { uuid: strin
         <nav className="tabs" aria-label="Main navigation">
           <Link className={pathname.endsWith("/practice") ? "active" : ""} href={`/u/${uuid}/practice`}>Practice</Link>
           <Link className={pathname.endsWith("/statistics") ? "active" : ""} href={`/u/${uuid}/statistics`}>Statistics</Link>
+          <ThemeToggle />
         </nav>
         <div className="profile-pill" aria-label={`Study ID ${uuid}`}>
           <span className="profile-dot" />
