@@ -121,6 +121,8 @@ export function PracticeClient({ uuid }: { uuid: string }) {
 
   const maxLength = Math.max(answer.length, word.romaji.length);
   const promptIsVisible = isFocused || Boolean(result);
+  const kanaLength = Array.from(word.kana).length;
+  const kanaSize = kanaLength >= 7 ? "kana-seven-plus" : kanaLength === 6 ? "kana-six" : kanaLength === 5 ? "kana-five" : "";
 
   return (
     <AppShell uuid={uuid} kicker="DAILY PRACTICE" title="" aside={<div className="practice-controls"><button className={adaptive ? "adaptive-toggle on" : "adaptive-toggle"} onClick={() => setAdaptive((value) => !value)}><i /><span><b>Adaptive mix</b><small>{adaptive ? "Prioritizing tricky kana" : "Fully random words"}</small></span></button><div className="session-pills"><span><b>{streak}</b> streak</span><span><b>{sessionCount}</b> words</span></div></div>}>
@@ -129,7 +131,7 @@ export function PracticeClient({ uuid }: { uuid: string }) {
         <div className="practice-body">
           <div className="word-stage">
             <p className="stage-label">TYPE THIS IN ROMAJI</p>
-            <div className="kana-word" lang="ja">{word.kana}</div>
+            <div className={`kana-word ${kanaSize}`.trim()} lang="ja">{word.kana}</div>
             {!isFocused && !result && <div className="focus-overlay" role="status"><strong>Practice paused</strong><span>Focus the answer field to continue</span></div>}
           </div>
           <form className="answer-area" onSubmit={check}>
