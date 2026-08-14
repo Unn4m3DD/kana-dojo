@@ -15,6 +15,29 @@ const ROMAJI: Record<string, string> = {
   びゃ:"bya",びゅ:"byu",びょ:"byo",ぴゃ:"pya",ぴゅ:"pyu",ぴょ:"pyo",
 };
 
+const KANA_ALTERNATIVES: Record<string, string[]> = {
+  し:["si"],ち:["ti"],つ:["tu"],ふ:["hu"],じ:["zi"],ぢ:["di"],づ:["du"],を:["o"],
+  しゃ:["sya"],しゅ:["syu"],しょ:["syo"],ちゃ:["tya"],ちゅ:["tyu"],ちょ:["tyo"],
+  じゃ:["zya","jya"],じゅ:["zyu","jyu"],じょ:["zyo","jyo"],
+};
+
+type KanaPracticeKind = "single" | "combination";
+
+const kanaPrompt = (kana: string, romaji: string, mode: KanaPracticeKind): KanaWord => ({
+  kana,
+  romaji,
+  alternatives: KANA_ALTERNATIVES[kana],
+  translation: mode === "single" ? "Individual kana" : "Combination kana",
+});
+
+export const SINGLE_KANA = Object.entries(ROMAJI)
+  .filter(([kana]) => Array.from(kana).length === 1)
+  .map(([kana, romaji]) => kanaPrompt(kana, romaji, "single"));
+
+export const COMBINATION_KANA = Object.entries(ROMAJI)
+  .filter(([kana]) => Array.from(kana).length === 2)
+  .map(([kana, romaji]) => kanaPrompt(kana, romaji, "combination"));
+
 export const RECENT_SUCCESS_WINDOW = 24;
 
 export function recentSuccessfulKana(attempts: Attempt[]) {
@@ -105,4 +128,17 @@ export function adaptiveWord(attempts: Attempt[], except?: string): KanaWord {
   let cursor = Math.random() * weighted.reduce((sum, item) => sum + item.weight, 0);
   for (const item of weighted) { cursor -= item.weight; if (cursor <= 0) return item.word; }
   return weighted[weighted.length - 1].word;
+}
+
+export function practiceKana(attempts: Attempt[], except?: string, adaptive = true): KanaWord {
+  const pool = [...SINGLE_KANA, ...COMBINATION_KANA];
+  const recentSuccesses = recentSuccessfulKana(attempts);
+  const freshCandidates = pool.filter((item) => item.kana !== except && !recentSuccesses.has(item.kana));
+  const candidates = freshCandidates.length ? freshCandidates : pool.filter((item) => item.kana !== except);
+  if (!adaptive || attempts.length < 3 || Math.random() < .25) return candidates[Math.floor(Math.random() * candidates.length)];
+  const missRate = new Map(kanaMastery(attempts).map((item) => [item.kana, 1 - item.accuracy / 100]));
+  const weighted = candidates.map((item) => ({ item, weight: 1 + (missRate.get(item.kana) || 0) * 5 }));
+  let cursor = Math.random() * weighted.reduce((sum, item) => sum + item.weight, 0);
+  for (const item of weighted) { cursor -= item.weight; if (cursor <= 0) return item.item; }
+  return weighted[weighted.length - 1].item;
 }

@@ -5,7 +5,14 @@ import { AppShell } from "./AppShell";
 import { randomWord, type KanaWord } from "@/lib/words";
 import { getAttempts, saveAttempt } from "@/lib/storage";
 import type { Attempt } from "@/lib/types";
-import { adaptiveWord, kanaBreakdown, recentSuccessfulKana } from "@/lib/kana";
+import { adaptiveWord, kanaBreakdown, practiceKana, recentSuccessfulKana } from "@/lib/kana";
+
+type PracticeMode = "words" | "kana";
+
+const PRACTICE_MODES: { value: PracticeMode; label: string }[] = [
+  { value: "words", label: "Words" },
+  { value: "kana", label: "Kana" },
+];
 
 export function PracticeClient({ uuid }: { uuid: string }) {
   const [word, setWord] = useState<KanaWord>({ kana: "きょう", romaji: "kyou", translation: "today" });
@@ -15,6 +22,7 @@ export function PracticeClient({ uuid }: { uuid: string }) {
   const [sessionCount, setSessionCount] = useState(0);
   const [storageMode, setStorageMode] = useState<"turso" | "device" | null>(null);
   const [adaptive, setAdaptive] = useState(true);
+  const [practiceMode, setPracticeMode] = useState<PracticeMode>("words");
   const [history, setHistory] = useState<Attempt[]>([]);
   const [isFocused, setIsFocused] = useState(false);
   const activeElapsed = useRef(0);
@@ -75,7 +83,7 @@ export function PracticeClient({ uuid }: { uuid: string }) {
     const matched = breakdown.filter((item) => item.correct).length;
     const attempt: Attempt = {
       id: crypto.randomUUID(), userId: uuid, kana: word.kana, translation: word.translation,
-      expected: word.romaji, answer: typed, correct, kanaCount: word.kana.length,
+      expected: word.romaji, answer: typed, correct, kanaCount: breakdown.length,
       correctKana: matched, durationMs: Math.round(durationMs),
       kanaPerMinute: Math.round((matched * 60000 / durationMs) * 10) / 10,
       kanaBreakdown: breakdown,
@@ -88,13 +96,30 @@ export function PracticeClient({ uuid }: { uuid: string }) {
     setStorageMode(await saveAttempt(uuid, attempt));
   }, [answer, result, updatePracticeFocus, uuid, word]);
 
+  const pickPrompt = useCallback((mode: PracticeMode, except?: string) => {
+    if (mode === "words") return adaptive ? adaptiveWord(history, except) : randomWord(except, recentSuccessfulKana(history));
+    return practiceKana(history, except, adaptive);
+  }, [adaptive, history]);
+
   const next = useCallback(() => {
-    setWord(adaptive ? adaptiveWord(history, word.kana) : randomWord(word.kana, recentSuccessfulKana(history)));
+    setWord(pickPrompt(practiceMode, word.kana));
     setAnswer("");
     setResult(null);
     resetActiveTimer();
     requestAnimationFrame(() => inputRef.current?.focus());
-  }, [adaptive, history, resetActiveTimer, word.kana]);
+  }, [pickPrompt, practiceMode, resetActiveTimer, word.kana]);
+
+  const changePracticeMode = useCallback((mode: PracticeMode) => {
+    if (mode === practiceMode) return;
+    setPracticeMode(mode);
+    setWord(pickPrompt(mode));
+    setAnswer("");
+    setResult(null);
+    setStreak(0);
+    setSessionCount(0);
+    resetActiveTimer();
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [pickPrompt, practiceMode, resetActiveTimer]);
 
   function check(event: FormEvent) {
     event.preventDefault();
@@ -123,9 +148,17 @@ export function PracticeClient({ uuid }: { uuid: string }) {
   const promptIsVisible = isFocused || Boolean(result);
   const kanaLength = Array.from(word.kana).length;
   const kanaSize = kanaLength >= 7 ? "kana-seven-plus" : kanaLength === 6 ? "kana-six" : kanaLength === 5 ? "kana-five" : "";
+  const promptLabel = practiceMode === "words" ? "words" : "kana";
+  const footerLabel = practiceMode === "words" ? "Mixed hiragana words" : "Individual & combination hiragana";
 
   return (
-    <AppShell uuid={uuid} kicker="DAILY PRACTICE" title="" aside={<div className="practice-controls"><button className={adaptive ? "adaptive-toggle on" : "adaptive-toggle"} onClick={() => setAdaptive((value) => !value)}><i /><span><b>Adaptive mix</b><small>{adaptive ? "Prioritizing tricky kana" : "Fully random words"}</small></span></button><div className="session-pills"><span><b>{streak}</b> streak</span><span><b>{sessionCount}</b> words</span></div></div>}>
+    <AppShell uuid={uuid} kicker="DAILY PRACTICE" title="" aside={<div className="practice-controls">
+      <div className="mode-picker" role="group" aria-label="Practice mode">
+        {PRACTICE_MODES.map((mode) => <button type="button" className={practiceMode === mode.value ? "active" : ""} aria-pressed={practiceMode === mode.value} onClick={() => changePracticeMode(mode.value)} key={mode.value}>{mode.label}</button>)}
+      </div>
+      <button type="button" className={adaptive ? "adaptive-toggle on" : "adaptive-toggle"} onClick={() => setAdaptive((value) => !value)}><i /><span><b>Adaptive mix</b><small>{adaptive ? "Prioritizing tricky kana" : "Random within this mode"}</small></span></button>
+      <div className="session-pills"><span><b>{streak}</b> streak</span><span><b>{sessionCount}</b> {promptLabel}</span></div>
+    </div>}>
       <section className={`practice-card ${promptIsVisible ? "is-focused" : "is-unfocused"} ${result ? (result.correct ? "is-correct" : "is-wrong") : ""}`}>
         <div className="card-index"><span>{String(sessionCount + 1).padStart(2, "0")}</span><i /><span className="focus-badge"><b />{result ? "Submitted" : isFocused ? "Focused" : "Paused"}</span></div>
         <div className="practice-body">
@@ -144,9 +177,9 @@ export function PracticeClient({ uuid }: { uuid: string }) {
             <div className="response-panel">
               {!result && <div className="coach-panel">
                 <p className="eyebrow">KEYBOARD RHYTHM</p>
-                <p>Type your answer, then use either key to check it. Press the same key again for the next word.</p>
+                <p>Type your answer, then use either key to check it. Press the same key again for the next prompt.</p>
                 <div className="key-guide"><kbd>space</kbd><span>or</span><kbd>enter ↵</kbd></div>
-                <button type="button" onClick={next}>Skip this word</button>
+                <button type="button" onClick={next}>Skip this prompt</button>
               </div>}
               {result && <div className="feedback" role="status">
                 <div className="feedback-title"><span>{result.correct ? "✓" : "!"}</span><strong>{result.correct ? "Nicely done." : "Almost — look closely."}</strong><em>{result.kanaPerMinute} kana/min</em></div>
@@ -163,7 +196,7 @@ export function PracticeClient({ uuid }: { uuid: string }) {
             </div>
           </form>
         </div>
-        <div className="card-footer"><span className="difficulty-dot" /> Mixed hiragana <span className="footer-divider">•</span> {storageMode === "device" ? "Saving on this device until Turso is connected" : "Progress saves automatically"}</div>
+        <div className="card-footer"><span className="difficulty-dot" /> {footerLabel} <span className="footer-divider">•</span> {storageMode === "device" ? "Saving on this device until Turso is connected" : "Progress saves automatically"}</div>
       </section>
       <div className="practice-note"><span>⌁</span><p><b>Small steps compound.</b> Accuracy comes first; speed follows naturally.</p></div>
     </AppShell>
